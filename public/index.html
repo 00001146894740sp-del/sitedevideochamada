@@ -3,25 +3,45 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Videochamada</title>
+  <title>Salas de Vídeo</title>
   <style>
     body { font-family: sans-serif; background: #121212; color: #fff; text-align: center; margin: 0; padding: 20px; }
+    .box { max-width: 420px; margin: 0 auto 20px; background: #1e1e1e; padding: 20px; border-radius: 10px; }
+    input, button { width: 100%; box-sizing: border-box; padding: 12px; font-size: 15px; border-radius: 6px; border: none; margin: 6px 0; }
+    input { background: #2c2c2c; color: #fff; }
+    button { background: #007bff; color: #fff; font-weight: bold; cursor: pointer; }
+    button:hover { background: #0056b3; }
+    .room-item { display: flex; justify-content: space-between; align-items: center; background: #2c2c2c; padding: 10px 14px; border-radius: 6px; margin-top: 8px; }
+    .room-item button { width: auto; padding: 6px 12px; margin: 0; font-size: 13px; }
     #videos { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; margin-top: 20px; }
     video { width: 100%; max-width: 420px; border-radius: 10px; background: #000; transform: scaleX(-1); }
-    input, button { padding: 10px 15px; font-size: 16px; border-radius: 6px; border: none; margin: 5px; }
-    button { background: #007bff; color: #fff; cursor: pointer; }
-    button:hover { background: #0056b3; }
+    #callControls { display: none; margin-top: 15px; }
+    #callControls button { width: auto; background: #dc3545; }
   </style>
 </head>
 <body>
-  <h2>Sala de Vídeo</h2>
-  <div id="controls">
-    <input type="text" id="roomInput" placeholder="Nome da sala (ex: reuniao1)">
-    <button id="joinBtn">Entrar</button>
+  <h2>Videochamada</h2>
+
+  <div id="lobby">
+    <div class="box">
+      <h3>Criar ou Entrar</h3>
+      <input type="text" id="roomInput" placeholder="Nome da sala">
+      <input type="password" id="passInput" placeholder="Senha (opcional)">
+      <button id="joinBtn">Entrar na Sala</button>
+    </div>
+
+    <div class="box">
+      <h3>Salinhas Abertas</h3>
+      <div id="roomList">Nenhuma sala ativa no momento.</div>
+    </div>
   </div>
-  <div id="videos">
-    <video id="localVideo" autoplay muted playsinline></video>
+
+  <div id="callControls">
+    <span id="roomTitle"></span>
+    <button onclick="location.reload()">Sair da Sala</button>
   </div>
+
+  <div id="videos"></div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="client.js"></script>
