@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Videochamada</title>
+  <style>
+    body { font-family: sans-serif; background: #121212; color: #fff; text-align: center; margin: 0; padding: 20px; }
+    #videos { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; margin-top: 20px; }
+    video { width: 100%; max-width: 420px; border-radius: 10px; background: #000; transform: scaleX(-1); }
+    input, button { padding: 10px 15px; font-size: 16px; border-radius: 6px; border: none; margin: 5px; }
+    button { background: #007bff; color: #fff; cursor: pointer; }
+    button:hover { background: #0056b3; }
+  </style>
+</head>
+<body>
+  <h2>Sala de Vídeo</h2>
+  <div id="controls">
+    <input type="text" id="roomInput" placeholder="Nome da sala (ex: reuniao1)">
+    <button id="joinBtn">Entrar</button>
+  </div>
+  <div id="videos">
+    <video id="localVideo" autoplay muted playsinline></video>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>
