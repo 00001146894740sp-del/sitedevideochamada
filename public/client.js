@@ -178,9 +178,9 @@ function createPeer(userId) {
     updateStatus(userId, `Status: ${peer.connectionState}`);
   };
 
-  // AQUI ESTAVA O BUG: agora pega e.streams[0] corretamente
   peer.ontrack = (e) => {
-    const remoteStream = (e.streams && e.streams[0]) ? e.streams[0] : new MediaStream([e.track]);
+    const firstStream = e.streams.at(0);
+    const remoteStream = firstStream ? firstStream : new MediaStream([e.track]);
     addVideoElement(userId, remoteStream, false, 'Conectado');
   };
 
