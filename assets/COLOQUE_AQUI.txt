@@ -1,7 +1,0 @@
-Coloque seus arquivos nesta pasta com estes nomes:
-
-  perfil.png  -> sua foto de perfil
-  fundo.mp4   -> vídeo de fundo
-  musica.mp3  -> música
-
-(Se quiser outros nomes, troque no CONFIG no topo do index.html)
