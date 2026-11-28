@@ -88,7 +88,7 @@ r.get('/search', ah(async (req, res) => {
     const rows = await db.many(`SELECT c.*, EXISTS (SELECT 1 FROM community_members m WHERE m.community_id=c.id AND m.user_id=$2) AS joined
       FROM communities c WHERE c.removed_at IS NULL AND (c.name ILIKE '%'||$1||'%' OR c.description ILIKE '%'||$1||'%')
         AND (c.is_public OR EXISTS (SELECT 1 FROM community_members m WHERE m.community_id=c.id AND m.user_id=$2)) LIMIT $3`, [like, me, lim]);
-    out.communities = rows.map(c => ({ id: c.id, name: c.name, description: c.description, logo: fileUrl(c.logo_file_id), joined: c.joined }));
+    out.communities = rows.map(c => ({ id: c.id, verified: c.verified, boostLevel: c.boost_level, tag: c.tag, name: c.name, description: c.description, logo: fileUrl(c.logo_file_id), joined: c.joined }));
   }
   if (want('channels')) {
     const rows = await db.many(`SELECT c.id, c.name, c.category, c.community_id, co.name AS community_name FROM conversations c JOIN communities co ON co.id=c.community_id
@@ -184,17 +184,27 @@ r.post('/stickers/:id/favorite', ah(async (req, res) => {
   res.json({ favorite: !ex });
 }));
 
+// GIFs via GIPHY (chave beta gratuita: 100 chamadas/hora — por isso há cache de 10 min)
+const gifCache = new Map();
 r.get('/gifs', ah(async (req, res) => {
-  if (!config.tenorApiKey) throw err(503, 'GIFs não configurados (TENOR_API_KEY).');
-  const q = str(req.query.q, { max: 60, required: false });
-  const url = q
-    ? `https://tenor.googleapis.com/v2/search?${new URLSearchParams({ q, key: config.tenorApiKey, client_key: 'newgg', limit: '24', media_filter: 'tinygif,gif', contentfilter: 'medium', locale: 'pt_BR' })}`
-    : `https://tenor.googleapis.com/v2/featured?${new URLSearchParams({ key: config.tenorApiKey, client_key: 'newgg', limit: '24', media_filter: 'tinygif,gif', contentfilter: 'medium', locale: 'pt_BR' })}`;
-  const data = await (await fetch(url)).json();
-  res.json((data.results || []).map(g => ({
-    id: g.id, preview: g.media_formats?.tinygif?.url, url: g.media_formats?.gif?.url,
-    width: g.media_formats?.gif?.dims?.[0], height: g.media_formats?.gif?.dims?.[1], title: g.content_description
-  })).filter(g => g.url));
+  if (!config.giphyApiKey) throw err(503, 'GIFs não configurados (GIPHY_API_KEY).');
+  const q = str(req.query.q, { max: 60, required: false }).toLowerCase();
+  const hit = gifCache.get(q);
+  if (hit && Date.now() - hit.t < 600000) return res.json(hit.data);
+  const params = new URLSearchParams({ api_key: config.giphyApiKey, limit: '24', rating: 'pg-13', bundle: 'messaging_non_clips' });
+  if (q) { params.set('q', q); params.set('lang', 'pt'); }
+  const r0 = await fetch(`https://api.giphy.com/v1/gifs/${q ? 'search' : 'trending'}?${params}`);
+  if (r0.status === 429) throw err(429, 'Limite de buscas de GIF atingido. Tente em alguns minutos.');
+  const data = await r0.json();
+  const out = (data.data || []).map(g => ({
+    id: g.id, title: g.title,
+    preview: g.images?.fixed_width_small?.url || g.images?.fixed_height_small?.url,
+    url: g.images?.fixed_height?.url || g.images?.original?.url,
+    width: Number(g.images?.fixed_height?.width) || 0, height: Number(g.images?.fixed_height?.height) || 0
+  })).filter(g => g.url);
+  gifCache.set(q, { t: Date.now(), data: out });
+  if (gifCache.size > 500) gifCache.delete(gifCache.keys().next().value);
+  res.json(out);
 }));
 
 // ===================== ARQUIVOS =====================

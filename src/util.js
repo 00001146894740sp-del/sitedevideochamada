@@ -61,10 +61,14 @@ function publicUser(u, { full = false } = {}) {
     displayName: u.display_name,
     avatar: fileUrl(u.avatar_file_id),
     color: u.profile_color,
-    role: u.global_role
+    role: u.global_role,
+    verified: !!u.verified,
+    frame: u.equipped_frame || null,
+    tag: u.server_tag || null
   };
   if (full) {
     Object.assign(o, {
+      effect: u.equipped_effect || null,
       bio: u.bio,
       customStatus: u.custom_status,
       banner: fileUrl(u.banner_file_id),

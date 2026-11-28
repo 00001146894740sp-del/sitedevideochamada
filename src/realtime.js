@@ -13,6 +13,21 @@ const { DEFAULT_PRIVACY, mergeDeep, publicUser } = require('./util');
 const MAX_CALL_PARTICIPANTS = 8;
 const RING_TIMEOUT_MS = 45000;
 const activeCalls = new Map(); // callId -> { convId, media, joined:Set, invited:Set, timer, initiator }
+// canais de voz das comunidades: channelId -> Map(userId -> { user, muted, deaf, video, screen, socketId, since })
+const voiceRooms = new Map();
+const MAX_VOICE = 12;
+function voiceState(channelId) {
+  const room = voiceRooms.get(channelId);
+  return { channelId, participants: room ? [...room.values()].map(p => ({ ...p.user, muted: p.muted, deaf: p.deaf, video: p.video, screen: p.screen, since: p.since })) : [] };
+}
+function voiceLeave(channelId, uid) {
+  const room = voiceRooms.get(channelId);
+  if (!room || !room.has(uid)) return;
+  room.delete(uid);
+  if (!room.size) voiceRooms.delete(channelId);
+  hub.toConv(channelId, 'voice:state', voiceState(channelId));
+  hub.toUsers([...(room.keys())], 'voice:peer-left', { channelId, userId: uid });
+}
 
 async function setup(server) {
   const io = new Server(server, {
@@ -198,8 +213,53 @@ async function setup(server) {
       cb(out);
     });
 
+    // ===================== CANAIS DE VOZ =====================
+    socket.on('voice:join', async ({ channelId } = {}, cb = () => {}) => {
+      try {
+        if (!allow()) return cb({ error: 'Muitas ações.' });
+        const cid = Number(channelId);
+        const a = await conversationAccess(cid, uid);
+        if (a.conv.type !== 'channel' || a.conv.category !== 'voz') return cb({ error: 'Este não é um canal de voz.' });
+        if (!a.canSend) return cb({ error: 'Você não tem permissão para falar neste canal.' });
+        // sai de outra sala de voz em que esteja
+        if (socket.data.voice && socket.data.voice !== cid) voiceLeave(socket.data.voice, uid);
+        for (const [rid, room] of voiceRooms) if (rid !== cid && room.has(uid)) { voiceLeave(rid, uid); hub.toUser(uid, 'voice:kicked', { channelId: rid, reason: 'other_device' }); }
+        if (!voiceRooms.has(cid)) voiceRooms.set(cid, new Map());
+        const room = voiceRooms.get(cid);
+        if (room.size >= MAX_VOICE && !room.has(uid)) return cb({ error: `Sala cheia (máximo de ${MAX_VOICE} pessoas).` });
+        const existing = [...room.keys()].filter(x => x !== uid);
+        room.set(uid, { user: publicUser(user), muted: false, deaf: false, video: false, screen: false, socketId: socket.id, since: Date.now() });
+        socket.data.voice = cid;
+        hub.toConv(cid, 'voice:state', voiceState(cid));
+        hub.toUsers(existing, 'voice:peer-joined', { channelId: cid, user: publicUser(user) });
+        cb({ ok: true, channelId: cid, participants: existing });
+      } catch (e) { cb({ error: e.message || 'Falha ao entrar na sala.' }); }
+    });
+    socket.on('voice:leave', ({ channelId } = {}) => { voiceLeave(Number(channelId), uid); if (socket.data.voice === Number(channelId)) socket.data.voice = null; });
+    socket.on('voice:signal', ({ channelId, to, data } = {}) => {
+      if (!allow()) return;
+      const room = voiceRooms.get(Number(channelId));
+      if (!room || !room.has(uid) || !room.has(Number(to))) return;
+      if (!data || typeof data !== 'object' || JSON.stringify(data).length > 100000) return;
+      hub.toUser(Number(to), 'voice:signal', { channelId: Number(channelId), from: uid, data });
+    });
+    socket.on('voice:update', ({ channelId, muted, deaf, video, screen } = {}) => {
+      const p = voiceRooms.get(Number(channelId))?.get(uid);
+      if (!p) return;
+      Object.assign(p, { muted: !!muted, deaf: !!deaf, video: !!video, screen: !!screen });
+      hub.toConv(Number(channelId), 'voice:state', voiceState(Number(channelId)));
+    });
+    socket.on('voice:list', async ({ channelIds } = {}, cb = () => {}) => {
+      if (!Array.isArray(channelIds)) return cb([]);
+      cb(channelIds.map(Number).filter(id => socket.rooms.has(`conv:${id}`)).slice(0, 200).map(voiceState));
+    });
+
     socket.on('disconnect', async () => {
       clearInterval(tick);
+      if (socket.data.voice) {
+        const room = voiceRooms.get(socket.data.voice);
+        if (room?.get(uid)?.socketId === socket.id) voiceLeave(socket.data.voice, uid);
+      }
       const left = await hub.decPresence(uid);
       if (left === 0) {
         await db.query('UPDATE users SET last_seen_at=now() WHERE id=$1', [uid]).catch(() => {});
@@ -252,4 +312,4 @@ async function endCall(callId, status) {
   await createMessage({ convId: c.convId, senderId: c.initiator, type: 'call', content: text, meta: { callId, status: call.status, media: c.media, duration: dur } }).catch(() => {});
 }
 
-module.exports = { setup, activeCalls };
+module.exports = { setup, activeCalls, voiceRooms };

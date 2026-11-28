@@ -23,7 +23,7 @@ const config = {
   requireEmailVerification: env.REQUIRE_EMAIL_VERIFICATION === 'true',
   smtp: {
     host: env.SMTP_HOST,
-    port: Number(env.SMTP_PORT || 587),
+    port: Number(env.SMTP_PORT || 2525),
     secure: env.SMTP_SECURE === 'true',
     user: env.SMTP_USER,
     pass: env.SMTP_PASS,
@@ -39,7 +39,7 @@ const config = {
     credential: env.TURN_CREDENTIAL
   },
   stunUrls: (env.STUN_URLS || 'stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302').split(',').map(s => s.trim()).filter(Boolean),
-  tenorApiKey: env.TENOR_API_KEY,
+  giphyApiKey: env.GIPHY_API_KEY,
   redisUrl: env.REDIS_URL,
   trustProxy: env.TRUST_PROXY ? Number(env.TRUST_PROXY) : (isProd ? 1 : 0),
   loginMaxAttempts: Number(env.LOGIN_MAX_ATTEMPTS || 5),

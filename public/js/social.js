@@ -1,6 +1,7 @@
 import {
   state, on, api, GET, POST, PATCH, DEL, h, clear, icon, iconBtn, toast, modal, menu, confirmDialog,
-  avatar, roleMark, richText, fmtRelative, fmtDate, field, tabs, pickFiles, PRESENCE_LABEL, ROLE_LABEL, EMOJI
+  avatar, roleMark, richText, playEffect, fmtRelative, fmtDate, field, tabs, pickFiles, PRESENCE_LABEL, ROLE_LABEL, EMOJI,
+  achievementEl
 } from './core.js';
 import { layout, go, renderRail } from './app.js';
 import * as chat from './chat.js';
@@ -48,7 +49,7 @@ export function renderFriendsSide() {
 function friendItem(f) {
   return h('div', { class: 'list-item', onClick: () => chat.startDM(f.id), onContextmenu: e => { e.preventDefault(); friendMenu(e, f); } },
     avatar(f, 40, { presence: f.presence }),
-    h('div', { class: 'meta' }, h('div', { class: 'name' }, h('span', null, f.displayName), roleMark(f.role)), h('div', { class: 'sub' }, f.customStatus || PRESENCE_LABEL[f.presence])),
+    h('div', { class: 'meta' }, h('div', { class: 'name' }, h('span', null, f.displayName), roleMark(f)), h('div', { class: 'sub' }, f.customStatus || PRESENCE_LABEL[f.presence])),
     iconBtn('more', 'Opções', e => { e.stopPropagation(); friendMenu(e, f); }));
 }
 function friendMenu(e, f) {
@@ -71,7 +72,7 @@ export function renderFriendsPage(tab = friendsTab) {
   layout.setMain(h('section', { class: 'main chat-bg-aurora', style: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 } }, head, body), { inChat: window.innerWidth <= 860 && tab !== 'online' });
   const row = (u, ...actions) => h('div', { class: 'list-item', style: { borderBottom: '1px solid var(--line)', borderRadius: 0 } },
     h('div', { style: { cursor: 'pointer' }, onClick: () => openProfile(u.id) }, avatar(u, 42, { presence: u.presence })),
-    h('div', { class: 'meta' }, h('div', { class: 'name' }, h('span', null, u.displayName), roleMark(u.role)), h('div', { class: 'sub' }, '@' + u.username + (u.customStatus ? ` · ${u.customStatus}` : ''))), ...actions);
+    h('div', { class: 'meta' }, h('div', { class: 'name' }, h('span', null, u.displayName), roleMark(u)), h('div', { class: 'sub' }, '@' + u.username + (u.customStatus ? ` · ${u.customStatus}` : ''))), ...actions);
   if (tab === 'online' || tab === 'all') {
     const list = tab === 'online' ? state.friends.filter(f => f.presence !== 'offline') : state.friends;
     body.appendChild(h('div', { class: 'section-label' }, `${tab === 'online' ? 'Online' : 'Todos os amigos'} — ${list.length}`));
@@ -170,15 +171,15 @@ export async function openProfile(id) {
       h('div', { class: 'cover', style: p.banner ? { backgroundImage: `url("${p.banner}")` } : { background: `linear-gradient(135deg, ${p.color}, #2b0b5c 60%, var(--gold))` } }),
       h('div', { style: { padding: '0 20px 18px', marginTop: '-46px', textAlign: 'center', display: 'grid', justifyItems: 'center', gap: '4px' } },
         h('div', { style: { border: '5px solid var(--panel)', borderRadius: '50%' } }, avatar(p, 92, { presence: p.presence })),
-        h('h2', { style: { fontFamily: 'var(--display)', margin: '6px 0 0', display: 'flex', gap: '8px', alignItems: 'center' } }, p.displayName, roleMark(p.role)),
-        h('div', { class: 'muted' }, '@' + p.username, p.role !== 'user' ? h('span', { class: 'chip gold', style: { marginLeft: '8px' } }, ROLE_LABEL[p.role]) : null),
+        h('h2', { style: { fontFamily: 'var(--display)', margin: '6px 0 0', display: 'flex', gap: '8px', alignItems: 'center' } }, p.displayName, roleMark(p)),
+        h('div', { class: 'muted' }, '@' + p.username),
         p.customStatus ? h('div', { class: 'chip', style: { marginTop: '4px' } }, p.customStatus) : null,
         h('div', { class: 'faint', style: { fontSize: '.85em' } }, `${PRESENCE_LABEL[p.presence]} · Membro desde ${new Date(p.createdAt).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`),
         h('div', { style: { marginTop: '10px' } }, actions))),
     p.limited ? h('div', { class: 'card', style: { marginTop: '14px', textAlign: 'center' } }, icon('lock', 18), ' Perfil visível apenas para amigos.') : null,
     p.bio ? h('div', { class: 'card', style: { marginTop: '14px' } }, h('div', { class: 'label' }, 'Sobre'), h('p', { style: { whiteSpace: 'pre-wrap', margin: '6px 0 0' } }, richText(p.bio))) : null,
     p.badges?.length ? h('div', { class: 'card' }, h('div', { class: 'label', style: { marginBottom: '8px' } }, 'Conquistas e insígnias'),
-      h('div', { class: 'badges', style: { justifyContent: 'flex-start' } }, p.badges.map(b => h('span', { class: `badge ${b.special ? 'special' : ''}`, title: b.description }, b.icon, b.name)))) : null,
+      h('div', { class: 'badges', style: { justifyContent: 'flex-start' } }, p.badges.map(b => achievementEl(b)))) : null,
     p.links?.length ? h('div', { class: 'card' }, h('div', { class: 'label', style: { marginBottom: '8px' } }, 'Links'),
       h('div', { class: 'row wrap' }, p.links.map(l => h('a', { class: 'chip', href: l.url, target: '_blank', rel: 'noopener noreferrer nofollow' }, icon('link', 13), l.label)))) : null,
     p.mutualFriends?.length ? h('div', { class: 'card' }, h('div', { class: 'label', style: { marginBottom: '8px' } }, `Amigos em comum (${p.mutualFriends.length})`),
@@ -190,6 +191,8 @@ export async function openProfile(id) {
   body.append(storiesBox, activityBox);
   const m = modal({ title: null, body, size: '' });
   m.el.querySelector('.modal-body').style.padding = '0 0 16px';
+  m.el.style.position = 'relative';
+  if (p.effect) setTimeout(() => playEffect(m.el, p.effect), 250);
   m.el.querySelector('.profile-preview').style.borderRadius = '0';
   m.el.querySelectorAll('.card').forEach(c => { c.style.margin = '12px 16px 0'; });
   // stories ativos
@@ -214,7 +217,7 @@ export async function fillDmInfoExtras(panel, other) {
   if (!p) return;
   const sec = h('div', { class: 'info-sec' });
   if (p.bio) sec.append(h('h4', null, 'Sobre'), h('p', { style: { whiteSpace: 'pre-wrap', margin: '0 0 10px' } }, richText(p.bio)));
-  if (p.badges?.length) sec.append(h('h4', null, 'Insígnias'), h('div', { class: 'badges', style: { justifyContent: 'flex-start' } }, p.badges.map(b => h('span', { class: `badge ${b.special ? 'special' : ''}`, title: b.description }, b.icon, b.name))));
+  if (p.badges?.length) sec.append(h('h4', null, 'Insígnias'), h('div', { class: 'badges', style: { justifyContent: 'flex-start' } }, p.badges.map(b => achievementEl(b))));
   if (p.mutualFriends?.length) sec.append(h('h4', { style: { marginTop: '12px' } }, `Amigos em comum · ${p.mutualFriends.length}`), h('div', { class: 'row wrap' }, p.mutualFriends.slice(0, 8).map(f => avatar(f, 30))));
   sec.append(h('h4', { style: { marginTop: '12px' } }, 'Membro desde'), h('div', { class: 'muted' }, new Date(p.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })));
   panel.insertBefore(sec, panel.children[2] || null);

@@ -15,6 +15,10 @@ Plataforma de comunicação em tempo real: conversas privadas, grupos, comunidad
 | Conversas | Envio em tempo real, respostas com citação, encaminhar, editar, apagar (para mim / para todos), reações, fixar, favoritar, enviada/entregue/visualizada, “digitando…”, histórico paginado, pesquisa na conversa, imagens, vídeos, documentos, áudios, gravação de voz, pré-visualização de links (com proteção SSRF), menções @, seleção múltipla, limpar histórico, arquivar, silenciar |
 | Grupos | Nome, foto, banner, descrição, dono/admins/moderadores/membros, link de convite, aprovação de entrada, permissões individuais, remoção, silenciamento temporário, aviso fixo, mensagens fixadas, histórico de participantes, grupos públicos/privados, modo “só admins enviam” |
 | Comunidades | Logo, banner, descrição, proprietário, cargos com hierarquia e 14 permissões, canais por categoria (geral, conversas, anúncios, suporte, mídia, memes, notícias, privados), canais privados por cargo, convites com limite/expiração, expulsão, banimento, denúncias, registro de atividades, transferência de propriedade |
+| Canais de voz | Estilo Discord: categoria “Canais de voz” nas comunidades, entrar/sair com um clique, até 12 pessoas por sala, quem está falando acende, mutar, ensurdecer, câmera e compartilhar tela dentro da sala, barra “Voz conectada” enquanto navega por outros canais |
+| Loja GG | Moeda GG, molduras e **efeitos de perfil em GIF** (enviados e configurados pelo dono: posição avatar/banner/tela inteira e duração), anúncios recompensados com tempo e prêmio configuráveis, extrato. Sem pagamento real |
+| Selos e tags | Selos de verificado e de cargo (Dono, Admin, Moderador, Suporte) em **interface** (texto + cores) ou **PNG** próprio, configuráveis em Admin → Tags, selos e impulso |
+| Impulso de servidor | Só o **Dono** da plataforma dá impulso (nível 1–3) e a **tag do servidor** (2 a 4 letras, ex.: `#CPX`, em interface ou PNG). Membros escolhem usar a tag ao lado do nome; sair da comunidade remove a tag. Clicar na tag de alguém mostra o servidor de origem e dá para entrar por ela — só se o servidor for público (privado exige convite) |
 | Chamadas | Voz e vídeo 1:1 e em grupo (até 8, malha P2P), tocar/atender/recusar/encerrar, silenciar microfone, câmera liga/desliga, compartilhar tela, histórico, notificação de chamada recebida |
 | Stories | Foto, vídeo ou texto; duração de 6 a 48 h; privacidade (amigos, amigos favoritos, público); visualizações, reações, respostas privadas (viram mensagem no privado), exclusão e arquivo pessoal |
 | Amigos | Solicitações (enviar/aceitar/recusar/cancelar), remover, bloquear, online, favoritos, sugestões (amigos em comum e comunidades), pesquisa |
@@ -24,7 +28,7 @@ Plataforma de comunicação em tempo real: conversas privadas, grupos, comunidad
 | Administração | Estatísticas e gráficos, usuários (busca/filtros), suspender, banir, desbanir, níveis (Dono, Administrador, Moderador, Suporte, Usuário), insígnias, denúncias com ações, comunidades e grupos (remover/restaurar), remoção de conteúdo, comunicados para todos, registros administrativos, configurações gerais |
 | Suporte | Abrir chamado com categoria, descrição e imagens; respostas da equipe; status aberto/em andamento/resolvido/encerrado |
 | Mídia | Validação pelo conteúdo real do arquivo (assinatura), bloqueio de executáveis/SVG/HTML, limite configurável, controle de acesso por conversa, download, exclusão dos próprios arquivos, suporte a *Range* (vídeo/áudio) |
-| Figurinhas/GIFs | Biblioteca de emojis com favoritos e recentes, figurinhas personalizadas (upload) e favoritas, GIFs via Tenor, reações rápidas |
+| Figurinhas/GIFs | Biblioteca de emojis com favoritos e recentes, figurinhas personalizadas (upload) e favoritas, GIFs via GIPHY, reações rápidas |
 | Personalização | Tema (noite violeta, meia-noite, claro), cor de destaque, plano de fundo das conversas, estilo das mensagens, tamanho da interface, reduzir movimento, alto contraste, sons, notificações |
 
 ### Segurança
@@ -65,7 +69,7 @@ O teste cria usuários e verifica cadastro, login, CSRF, perfil, uploads (inclus
 ### Opção A — Blueprint (recomendado)
 1. Suba este projeto para um repositório no GitHub (o `.gitignore` já exclui `.env` e `node_modules`).
 2. No Render: **New + → Blueprint** e escolha o repositório. O `render.yaml` cria o banco `newgg-db` e o serviço web `newgg`, gera `SESSION_SECRET` e `OWNER_SETUP_TOKEN` automaticamente e liga o `DATABASE_URL`.
-3. Preencha as variáveis marcadas como “sync: false” (opcionais: SMTP, Google, Discord, TURN, Tenor, OWNER_EMAIL).
+3. Preencha as variáveis marcadas como “sync: false” (opcionais: SMTP, Google, Discord, TURN, GIPHY, OWNER_EMAIL).
 4. Faça o deploy. Ao abrir o site, crie sua conta e vire o dono (veja abaixo).
 
 ### Opção B — Manual
@@ -111,7 +115,7 @@ O teste cria usuários e verifica cadastro, login, CSRF, perfil, uploads (inclus
 | `STUN_URLS` | — | Servidores STUN (separados por vírgula) |
 | `TURN_URLS` `TURN_USERNAME` `TURN_CREDENTIAL` | — | Servidor TURN para chamadas |
 | `MAX_UPLOAD_MB` | — | Teto de upload (padrão 50, máx. 100) |
-| `TENOR_API_KEY` | — | GIFs |
+| `GIPHY_API_KEY` | — | GIFs (chave beta gratuita do GIPHY) |
 | `REDIS_URL` | — | Múltiplas instâncias |
 | `DB_POOL_MAX` | — | Conexões no pool (padrão 10) |
 | `BACKUP_DIR` / `BACKUP_KEEP` | — | Script de backup |

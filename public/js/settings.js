@@ -1,6 +1,6 @@
 import {
-  state, api, GET, POST, PATCH, DEL, h, clear, icon, iconBtn, toast, modal, confirmDialog,
-  avatar, field, switchEl, pickFiles, fmtDate, fmtRelative, applyAppearance, copy
+  state, api, GET, POST, PATCH, DEL, h, clear, icon, iconBtn, toast, modal, confirmDialog, promptDialog,
+  avatar, serverTagEl, field, switchEl, pickFiles, fmtDate, fmtRelative, applyAppearance, copy
 } from './core.js';
 import { renderRail, logout } from './app.js';
 import * as social from './social.js';
@@ -45,6 +45,13 @@ async function account(el) {
   el.append(h('h2', null, 'Minha conta'),
     h('div', { class: 'card row' }, avatar(state.me, 64), h('div', { class: 'grow' }, h('b', { style: { fontSize: '1.15em' } }, me.displayName), h('div', { class: 'muted' }, '@' + me.username), h('div', { class: 'faint', style: { fontSize: '.85em' } }, `Conta criada em ${fmtDate(me.createdAt)}`))));
 
+  el.appendChild(h('div', { class: 'card row between' }, h('div', null, h('b', null, 'Selo de verificado'), h('div', { class: 'hint' }, me.verified ? 'Sua conta é verificada ✔' : 'Criadores, figuras conhecidas e parceiros podem pedir o selo.')),
+    me.verified ? h('span', { class: 'chip gold' }, '✔ Verificado') : h('button', { class: 'btn sm', onClick: async () => {
+      const why = await promptDialog('Por que sua conta deveria ser verificada? Inclua links que comprovem.', { title: 'Pedir verificação', multiline: true, confirmText: 'Enviar pedido' });
+      if (!why) return;
+      const fd = new FormData(); fd.append('category', 'verificacao'); fd.append('subject', 'Pedido de verificação'); fd.append('description', why.length >= 10 ? why : why + ' (pedido de selo)');
+      await api('POST', '/support/tickets', undefined, { form: fd }); toast('Pedido enviado! A equipe vai analisar pela Central de suporte.', 'ok');
+    } }, 'Pedir verificação')));
   const un = h('input', { class: 'input', value: me.username, maxlength: 24 });
   el.appendChild(h('div', { class: 'card' }, field('Nome de usuário', un, 'Seu identificador único. Letras, números, _ e ponto.'),
     h('button', { class: 'btn sm primary', onClick: async () => { await PATCH('/users/me', { username: un.value }); state.me.username = un.value; toast('Nome de usuário alterado!', 'ok'); } }, 'Salvar')));
@@ -115,6 +122,7 @@ function profile(el) {
           h('button', { class: 'btn sm', onClick: upload('banner') }, icon('image', 15), 'Banner'),
           me.banner ? h('button', { class: 'btn sm ghost', onClick: async () => { await DEL('/users/me/banner'); state.me.banner = null; clear(el); profile(el); } }, 'Remover') : null))),
     field('Nome de exibição', dn), field('Status personalizado', st), field('Biografia', bio),
+    tagPicker(),
     h('div', { class: 'label', style: { marginBottom: '8px' } }, 'Cor do perfil'), dots, h('div', { style: { height: '14px' } }),
     h('div', { class: 'label', style: { marginBottom: '8px' } }, 'Links sociais'), linksBox,
     h('button', { class: 'btn primary', style: { marginTop: '18px' }, onClick: async () => {
@@ -244,4 +252,21 @@ function data(el) {
           const r = await POST('/users/me/delete-request', { password: pw.value, confirm: pw.value }); toast(r.message, 'ok'); setTimeout(() => location.reload(), 1200);
         } }, 'Solicitar exclusão'))));
   void copy;
+}
+
+function tagPicker() {
+  const box = h('div', { class: 'card' }, h('div', { class: 'label', style: { marginBottom: '8px' } }, 'Tag de servidor'), h('div', { class: 'spinner' }));
+  GET('/users/me/server-tags').then(list => {
+    box.lastChild.remove();
+    if (!list.length) return box.appendChild(h('p', { class: 'hint', style: { margin: 0 } }, 'Nenhuma comunidade sua tem tag ainda. Comunidades impulsionadas podem ganhar uma tag de 3 letras (ex.: #CPX).'));
+    const row = h('div', { class: 'row wrap' });
+    const pick = async id => { const r = await POST('/users/me/server-tag', { communityId: id }); state.me.tag = r.tag; renderRail(); toast(id ? 'Tag atualizada!' : 'Tag removida.', 'ok'); draw(); };
+    const draw = () => {
+      clear(row);
+      row.appendChild(h('button', { class: `btn sm ${!state.me.tag ? 'primary' : ''}`, onClick: () => pick(null) }, 'Nenhuma'));
+      for (const t of list) row.appendChild(h('button', { class: `btn sm ${state.me.tag?.communityId === t.communityId ? 'primary' : ''}`, onClick: () => pick(t.communityId), title: t.name }, serverTagEl({ ...t.tag, community: t.name }), ' ', t.name));
+    };
+    draw(); box.appendChild(row);
+  });
+  return box;
 }

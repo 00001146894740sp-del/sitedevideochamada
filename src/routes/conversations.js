@@ -476,7 +476,7 @@ r.post('/conversations/:id/messages', ah(async (req, res) => {
     meta = { stickerId: st.id, url: fileUrl(st.file_id) };
   } else if (type === 'gif') {
     const url = str(req.body.gifUrl, { name: 'GIF', min: 10, max: 500 });
-    if (!/^https:\/\/(media\d*\.tenor\.com|c\.tenor\.com)\//.test(url)) throw err(400, 'GIF inválido.');
+    if (!/^https:\/\/(media\d*\.giphy\.com|i\.giphy\.com)\//.test(url)) throw err(400, 'GIF inválido.');
     meta = { url, width: int(req.body.width, { def: 0, min: 0, max: 4000 }), height: int(req.body.height, { def: 0, min: 0, max: 4000 }) };
   }
   if (fileIds.length) {

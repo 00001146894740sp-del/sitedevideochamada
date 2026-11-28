@@ -1,12 +1,13 @@
 import {
   state, on, api, GET, POST, PATCH, PUT, DEL, h, clear, icon, iconBtn, toast, modal, menu, confirmDialog, promptDialog,
-  avatar, roleMark, fmtRelative, fmtDate, field, switchEl, tabs, pickFiles, copy
+  avatar, roleMark, verifiedMark, serverTagEl, fmtRelative, fmtDate, field, switchEl, tabs, pickFiles, copy
 } from './core.js';
 import { layout, go, renderRail } from './app.js';
 import * as chat from './chat.js';
 import * as social from './social.js';
+import * as voice from './voice.js';
 
-const CATS = [['geral', 'Geral', 'hash'], ['anuncios', 'Anúncios', 'megaphone'], ['noticias', 'Notícias', 'megaphone'], ['conversas', 'Conversas', 'hash'], ['suporte', 'Suporte', 'support'], ['midia', 'Mídia', 'image'], ['memes', 'Memes', 'smile'], ['privado', 'Privados', 'lock']];
+const CATS = [['geral', 'Geral', 'hash'], ['anuncios', 'Anúncios', 'megaphone'], ['noticias', 'Notícias', 'megaphone'], ['conversas', 'Conversas', 'hash'], ['suporte', 'Suporte', 'support'], ['midia', 'Mídia', 'image'], ['memes', 'Memes', 'smile'], ['privado', 'Privados', 'lock'], ['voz', 'Canais de voz', 'volume']];
 let curCom = null; // detalhe da comunidade aberta
 
 export async function loadCommunities() {
@@ -24,6 +25,8 @@ on('channel:message', m => {
 });
 on('channel:read', id => { const ch = curCom?.channels.find(c => c.id === id); if (ch && ch.unread) { ch.unread = false; renderComSide(); } });
 on('community:update', d => { if (curCom && d.id === curCom.id) refresh(); });
+on('voice:state', () => renderComSide());
+on('voice:changed', () => renderComSide());
 
 const has = bit => curCom && (curCom.perms & curCom.permBits[bit]) === curCom.permBits[bit];
 
@@ -41,13 +44,16 @@ export async function openCommunity(id, channelId, highlight) {
   if (!d.isMember) return previewCommunity(id);
   curCom = d;
   renderComSide();
-  const target = channelId || (state.view.lastChannel?.[id] && d.channels.find(c => c.id === state.view.lastChannel[id])?.id) || d.channels[0]?.id;
+  voice.refreshStates(d.channels.filter(c => c.category === 'voz').map(c => c.id));
+  const target = channelId || (state.view.lastChannel?.[id] && d.channels.find(c => c.id === state.view.lastChannel[id])?.id) || d.channels.find(c => c.category !== 'voz')?.id;
   if (target) openChannel(target, highlight);
   else layout.setMain(h('div', { class: 'welcome' }, h('h2', null, d.name), h('p', null, 'Nenhum canal disponível para você.')));
   await loadCommunities(); renderRail();
 }
 
 function openChannel(cid, highlight) {
+  const vch = curCom.channels.find(c => c.id === cid);
+  if (vch?.category === 'voz') { voice.join(vch, { id: curCom.id, name: curCom.name }); return; }
   state.view.lastChannel = { ...(state.view.lastChannel || {}), [curCom.id]: cid };
   const ch = curCom.channels.find(c => c.id === cid);
   if (ch) ch.unread = false;
@@ -65,20 +71,29 @@ function renderComSide() {
     if (!list.length) continue;
     body.appendChild(h('div', { class: 'section-label' }, label, has('MANAGE_CHANNELS') ? iconBtn('plus', 'Criar canal', () => createChannel(cat)) : null));
     for (const c of list) {
-      body.appendChild(h('button', { class: `channel ${state.view.convId === c.id ? 'on' : ''} ${c.unread ? 'unread' : ''}`, onClick: () => openChannel(c.id), onContextmenu: e => { e.preventDefault(); channelMenu(e, c); } },
-        icon(c.isPrivate ? 'lock' : ic), h('span', { class: 'ellipsis' }, c.name)));
+      body.appendChild(h('button', { class: `channel ${state.view.convId === c.id ? 'on' : ''} ${c.unread && cat !== 'voz' ? 'unread' : ''}`, onClick: () => openChannel(c.id), onContextmenu: e => { e.preventDefault(); channelMenu(e, c); } },
+        icon(c.isPrivate ? 'lock' : ic), h('span', { class: 'ellipsis' }, c.name), cat === 'voz' && voice.participants(c.id).length ? h('small', { class: 'faint', style: { marginLeft: 'auto' } }, voice.participants(c.id).length) : null));
+      if (cat === 'voz' && voice.participants(c.id).length) {
+        body.appendChild(h('div', { class: 'voice-users' }, voice.participants(c.id).map(p => h('div', { class: `voice-user ${voice.current()?.speaking?.has(p.id) ? 'speaking' : ''}`, dataset: { voiceUid: p.id } },
+          avatar(p, 22), h('span', { class: 'ellipsis grow' }, p.displayName), p.deaf ? icon('headphones') : p.muted ? icon('micoff') : null, p.video ? icon('video') : null))));
+      }
     }
   }
   if (!d.channels.length) body.appendChild(h('div', { class: 'empty' }, 'Sem canais visíveis.'));
   const menuBtn = iconBtn('more', 'Opções da comunidade', e => comMenu(e));
   layout.setSide(h('div', { style: { display: 'contents' } },
     h('div', { class: 'com-banner', style: d.banner ? { backgroundImage: `url("${d.banner}")` } : null },
-      h('div', { class: 'com-name' }, d.logo ? h('img', { src: d.logo, alt: '', style: { width: '30px', height: '30px', borderRadius: '9px', objectFit: 'cover' } }) : null, h('span', { class: 'ellipsis' }, d.name), d.isOwner ? icon('crown', 15) : null),
+      h('div', { class: 'com-name' }, d.logo ? h('img', { src: d.logo, alt: '', style: { width: '30px', height: '30px', borderRadius: '9px', objectFit: 'cover' } }) : null, h('span', { class: 'ellipsis' }, d.name), d.verified ? verifiedMark('Comunidade verificada') : null, d.isOwner ? icon('crown', 15) : null),
       h('div', { class: 'com-menu' }, menuBtn)),
+    d.boostLevel || d.tag ? h('div', { style: { padding: '8px 10px 0', display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' } },
+      d.boostLevel ? h('span', { class: 'boost-chip', title: 'Comunidade impulsionada' }, icon('gem', 13), `Impulso nível ${d.boostLevel}`) : null,
+      d.tag ? serverTagEl({ ...d.tag, community: d.name }) : null,
+      d.tag && state.me.tag?.communityId !== d.id ? h('button', { class: 'btn sm ghost', style: { padding: '3px 8px' }, onClick: async () => { const r = await POST('/users/me/server-tag', { communityId: d.id }); state.me.tag = r.tag; toast(`Agora a tag #${d.tag.text} aparece ao lado do seu nome!`, 'ok'); renderComSide(); } }, 'Usar tag') : null,
+      d.tag && state.me.tag?.communityId === d.id ? h('small', { class: 'faint' }, 'Você usa esta tag') : null) : null,
     h('div', { style: { padding: '8px 10px', display: 'flex', gap: '6px', borderBottom: '1px solid var(--line)' } },
       has('CREATE_INVITES') ? h('button', { class: 'btn sm primary grow', onClick: invite }, icon('userplus', 15), 'Convidar') : null,
       h('button', { class: 'btn sm grow', onClick: () => membersModal() }, icon('users', 15), `${d.memberCount}`)),
-    body));
+    body, voice.voiceBar()));
 }
 
 function comMenu(e) {
@@ -162,7 +177,7 @@ async function membersModal() {
     for (const m of members) {
       const roles = curCom.roles.filter(r => m.roleIds.includes(r.id)).sort((a, b) => b.position - a.position);
       list.appendChild(h('div', { class: 'list-item' }, avatar(m, 38, { presence: m.presence }),
-        h('div', { class: 'meta' }, h('div', { class: 'name' }, h('span', { style: { color: roles[0]?.color } }, m.nickname || m.displayName), m.isOwner ? icon('crown', 14) : null, roleMark(m.role)),
+        h('div', { class: 'meta' }, h('div', { class: 'name' }, h('span', { style: { color: roles[0]?.color } }, m.nickname || m.displayName), m.isOwner ? icon('crown', 14) : null, roleMark(m)),
           h('div', { class: 'row wrap', style: { gap: '4px', marginTop: '2px' } }, h('small', { class: 'faint' }, '@' + m.username), roles.map(r => h('span', { class: 'chip', style: { color: r.color, background: 'transparent', border: `1px solid ${r.color}55` } }, r.name)))),
         iconBtn('more', 'Opções', e => memberMenu(e, m, load))));
     }
@@ -367,7 +382,7 @@ export function renderDiscoverSide() {
   const list = h('div', { class: 'side-body' });
   list.appendChild(h('div', { class: 'section-label' }, 'Suas comunidades'));
   if (!state.communities.length) list.appendChild(h('div', { class: 'hint', style: { padding: '0 10px' } }, 'Você ainda não participa de nenhuma.'));
-  for (const c of state.communities) list.appendChild(h('button', { class: 'list-item', onClick: () => go('community', { communityId: c.id }) }, avatar(c, 40, { square: true }), h('div', { class: 'meta' }, h('div', { class: 'name' }, c.name, c.unread ? h('span', { class: 'gold' }, '✦') : null), h('div', { class: 'sub' }, `${c.memberCount} membros`))));
+  for (const c of state.communities) list.appendChild(h('button', { class: 'list-item', onClick: () => go('community', { communityId: c.id }) }, avatar(c, 40, { square: true }), h('div', { class: 'meta' }, h('div', { class: 'name' }, c.name, c.verified ? verifiedMark() : null, c.unread ? h('span', { class: 'gold' }, '✦') : null), h('div', { class: 'sub' }, `${c.memberCount} membros`))));
   layout.setSide(h('div', { style: { display: 'contents' } },
     h('div', { class: 'side-head' }, h('div', { class: 'row between' }, h('h2', { class: 'side-title' }, h('span', { class: 'spark' }, '✦'), 'Comunidades'), h('button', { class: 'btn primary sm', onClick: openCreate }, icon('plus', 16), 'Criar'))),
     list));
@@ -390,7 +405,7 @@ export async function renderDiscover() {
       grid.appendChild(h('div', { class: 'card', style: { padding: 0, overflow: 'hidden', cursor: 'pointer' }, onClick: () => c.joined ? go('community', { communityId: c.id }) : previewCommunity(c.id) },
         h('div', { style: { height: '90px', background: c.banner ? `center/cover url("${c.banner}")` : 'linear-gradient(135deg,#3b0a78,var(--accent),var(--gold))' } }),
         h('div', { style: { padding: '0 14px 14px', marginTop: '-26px' } }, h('div', { style: { border: '4px solid var(--bg2)', borderRadius: '30%', display: 'inline-block' } }, avatar(c, 52, { square: true })),
-          h('h3', { style: { margin: '6px 0 2px' } }, c.name), h('p', { class: 'muted', style: { margin: '0 0 8px', fontSize: '.88em', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } }, c.description || 'Sem descrição.'),
+          h('h3', { style: { margin: '6px 0 2px', display: 'flex', gap: '6px', alignItems: 'center' } }, c.name, c.verified ? verifiedMark('Comunidade verificada') : null), h('p', { class: 'muted', style: { margin: '0 0 8px', fontSize: '.88em', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } }, c.description || 'Sem descrição.'),
           h('div', { class: 'row between' }, h('span', { class: 'chip' }, `${c.memberCount} membros`), c.joined ? h('span', { class: 'chip green' }, 'Membro') : h('span', { class: 'chip gold' }, 'Entrar')))));
     }
   };
@@ -398,13 +413,44 @@ export async function renderDiscover() {
   load();
 }
 
+// Ao clicar numa tag (#CPX): mostra o servidor de origem; entra direto se for público.
+export async function serverTagCard(cid) {
+  let d;
+  try { d = await GET(`/server-tags/${cid}`); } catch { return; }
+  const cover = d.banner ? `center/cover url("${d.banner}")` : 'linear-gradient(135deg,#3b0a78,var(--accent),var(--gold))';
+  const status = d.banned ? h('div', { class: 'form-error' }, 'Você foi banido deste servidor.')
+    : d.isMember ? h('span', { class: 'chip green' }, 'Você já é membro')
+    : !d.isPublic ? h('div', { class: 'tag-private' }, icon('lock', 16), h('span', null, 'Servidor privado — só dá para entrar com convite.')) : null;
+  const enter = async (btn) => {
+    btn.disabled = true;
+    try { await POST(`/communities/${d.id}/join`); m.close(); await loadCommunities(); go('community', { communityId: d.id }); }
+    catch { btn.disabled = false; }
+  };
+  const foot = [h('button', { class: 'btn ghost', onClick: () => m.close() }, 'Fechar')];
+  if (d.isMember) foot.push(h('button', { class: 'btn primary', onClick: () => { m.close(); go('community', { communityId: d.id }); } }, 'Abrir servidor'));
+  else if (d.isPublic && !d.banned) foot.push(h('button', { class: 'btn primary', onClick: e => enter(e.currentTarget) }, icon('userplus', 16), 'Entrar pelo #' + d.tag.text));
+  const m = modal({
+    title: null,
+    body: h('div', null, h('div', { style: { height: '100px', background: cover } }),
+      h('div', { style: { textAlign: 'center', padding: '0 20px 14px', marginTop: '-38px', display: 'grid', justifyItems: 'center', gap: '8px' } },
+        h('div', { style: { border: '5px solid var(--panel)', borderRadius: '30%' } }, avatar(d, 72, { square: true })),
+        h('h2', { style: { fontFamily: 'var(--display)', margin: 0, display: 'flex', gap: '8px', alignItems: 'center' } }, d.name, d.verified ? verifiedMark() : null),
+        h('div', { class: 'row', style: { gap: '6px', justifyContent: 'center' } }, serverTagEl({ ...d.tag }), d.boostLevel ? h('span', { class: 'boost-chip' }, icon('gem', 12), `Impulso nível ${d.boostLevel}`) : null),
+        d.description ? h('p', { class: 'muted', style: { margin: 0 } }, d.description) : null,
+        h('span', { class: 'chip' }, `${d.memberCount} ${d.memberCount === 1 ? "membro" : "membros"}`), status)),
+    foot
+  });
+  m.el.querySelector('.modal-body').style.padding = '0';
+}
+on('open-server-tag', serverTagCard);
+
 export async function previewCommunity(id) {
   let d;
   try { d = await GET(`/communities/${id}`); } catch { return; }
   const m = modal({
     title: null,
     body: h('div', null, h('div', { style: { height: '110px', background: d.banner ? `center/cover url("${d.banner}")` : 'linear-gradient(135deg,#3b0a78,var(--accent),var(--gold))' } }),
-      h('div', { style: { textAlign: 'center', padding: '0 20px 10px', marginTop: '-40px', display: 'grid', justifyItems: 'center', gap: '6px' } }, h('div', { style: { border: '5px solid var(--panel)', borderRadius: '30%' } }, avatar(d, 76, { square: true })), h('h2', { style: { fontFamily: 'var(--display)', margin: 0 } }, d.name), h('p', { class: 'muted', style: { margin: 0 } }, d.description), h('span', { class: 'chip' }, `${d.memberCount} membros`),
+      h('div', { style: { textAlign: 'center', padding: '0 20px 10px', marginTop: '-40px', display: 'grid', justifyItems: 'center', gap: '6px' } }, h('div', { style: { border: '5px solid var(--panel)', borderRadius: '30%' } }, avatar(d, 76, { square: true })), h('h2', { style: { fontFamily: 'var(--display)', margin: 0, display: 'flex', gap: '8px', alignItems: 'center' } }, d.name, d.verified ? verifiedMark('Comunidade verificada') : null), h('p', { class: 'muted', style: { margin: 0 } }, d.description), h('span', { class: 'chip' }, `${d.memberCount} ${d.memberCount === 1 ? "membro" : "membros"}`),
         d.banned ? h('div', { class: 'form-error' }, 'Você foi banido desta comunidade.') : null)),
     foot: d.banned ? null : [h('button', { class: 'btn ghost', onClick: () => m.close() }, 'Agora não'), h('button', { class: 'btn primary', onClick: async () => { await POST(`/communities/${id}/join`); m.close(); await loadCommunities(); go('community', { communityId: id }); } }, 'Entrar na comunidade')]
   });
@@ -417,7 +463,7 @@ export async function openInvite(code) {
   if (inv.isMember) return go('community', { communityId: inv.communityId });
   const m = modal({
     title: 'Você foi convidado!',
-    body: h('div', { style: { textAlign: 'center', display: 'grid', justifyItems: 'center', gap: '8px' } }, avatar(inv, 80, { square: true }), h('h2', { style: { fontFamily: 'var(--display)', margin: 0 } }, inv.name), h('p', { class: 'muted', style: { margin: 0 } }, inv.description), h('span', { class: 'chip' }, `${inv.memberCount} membros`)),
+    body: h('div', { style: { textAlign: 'center', display: 'grid', justifyItems: 'center', gap: '8px' } }, avatar(inv, 80, { square: true }), h('h2', { style: { fontFamily: 'var(--display)', margin: 0, display: 'flex', gap: '8px', alignItems: 'center' } }, inv.name, inv.verified ? verifiedMark('Comunidade verificada') : null), h('p', { class: 'muted', style: { margin: 0 } }, inv.description), h('span', { class: 'chip' }, `${inv.memberCount} membros`)),
     foot: [h('button', { class: 'btn ghost', onClick: () => m.close() }, 'Recusar'), h('button', { class: 'btn primary', onClick: async () => { const r = await POST(`/invites/community/${encodeURIComponent(code)}/join`); m.close(); await loadCommunities(); go('community', { communityId: r.communityId }); } }, 'Aceitar convite')]
   });
 }

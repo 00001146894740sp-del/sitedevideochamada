@@ -9,7 +9,9 @@ const { withPresence } = require('./users');
 const { ah, err, str, int, bool, oneOf, idArray, randomToken, publicUser, fileUrl } = require('../util');
 
 const r = express.Router();
-const CATEGORIES = ['geral', 'conversas', 'anuncios', 'suporte', 'midia', 'memes', 'noticias', 'privado'];
+const CATEGORIES = ['geral', 'conversas', 'anuncios', 'suporte', 'midia', 'memes', 'noticias', 'privado', 'voz'];
+// remove a tag do servidor de quem saiu, foi expulso ou banido
+const dropTag = (communityId, userId) => db.query(`UPDATE users SET server_tag=NULL WHERE id=$1 AND (server_tag->>'communityId')::bigint=$2`, [userId, communityId]);
 
 async function audit(communityId, actorId, action, target, data = {}) {
   await db.query(`INSERT INTO community_audit (community_id, actor_id, action, target, data) VALUES ($1,$2,$3,$4,$5)`,
@@ -29,7 +31,7 @@ async function resyncMembers(communityId) {
 }
 
 function serializeCommunity(c, extra = {}) {
-  return { id: c.id, name: c.name, description: c.description, logo: fileUrl(c.logo_file_id), banner: fileUrl(c.banner_file_id), ownerId: c.owner_id, isPublic: c.is_public, createdAt: c.created_at, ...extra };
+  return { id: c.id, name: c.name, description: c.description, logo: fileUrl(c.logo_file_id), banner: fileUrl(c.banner_file_id), ownerId: c.owner_id, isPublic: c.is_public, verified: !!c.verified, boostLevel: c.boost_level || 0, tag: c.tag || null, createdAt: c.created_at, ...extra };
 }
 
 r.get('/communities', ah(async (req, res) => {
@@ -71,7 +73,7 @@ r.post('/communities', ah(async (req, res) => {
     await t.query(`INSERT INTO community_roles (community_id, name, permissions, position, color) VALUES ($1,'Moderação',$2,2,'#9d4dff')`,
       [c.id, DEFAULT_EVERYONE | P.MANAGE_MESSAGES | P.KICK_MEMBERS | P.VIEW_AUDIT_LOG | P.HANDLE_REPORTS | P.POST_ANNOUNCEMENTS]);
     await t.query(`INSERT INTO community_members (community_id, user_id) VALUES ($1,$2)`, [c.id, req.user.id]);
-    const defaults = [['boas-vindas', 'geral', 0], ['avisos', 'anuncios', 1], ['bate-papo', 'conversas', 2], ['mídia', 'midia', 3], ['memes', 'memes', 4]];
+    const defaults = [['boas-vindas', 'geral', 0], ['avisos', 'anuncios', 1], ['bate-papo', 'conversas', 2], ['mídia', 'midia', 3], ['memes', 'memes', 4], ['Sala de voz', 'voz', 5]];
     for (const [n, cat, pos] of defaults) {
       await t.query(`INSERT INTO conversations (type, name, community_id, category, position, owner_id) VALUES ('channel',$1,$2,$3,$4,$5)`, [n, c.id, cat, pos, req.user.id]);
     }
@@ -171,6 +173,7 @@ r.post('/communities/:id/leave', ah(async (req, res) => {
   const ctx = await ctxFor(req);
   if (ctx.isOwner) throw err(400, 'Transfira a propriedade antes de sair.');
   await db.query('DELETE FROM community_members WHERE community_id=$1 AND user_id=$2', [ctx.community.id, req.user.id]);
+  await dropTag(ctx.community.id, req.user.id);
   await audit(ctx.community.id, req.user.id, 'member_left', req.user.id);
   hub.resync?.(req.user.id);
   res.json({ ok: true });
@@ -246,6 +249,7 @@ r.delete('/communities/:id/members/:userId', ah(async (req, res) => {
   const target = int(req.params.userId, { min: 1 });
   if (await memberTop(ctx.community.id, target, ctx.community.owner_id) >= ctx.topPosition) throw err(403, 'Você não pode expulsar este membro.');
   await db.query('DELETE FROM community_members WHERE community_id=$1 AND user_id=$2', [ctx.community.id, target]);
+  await dropTag(ctx.community.id, target);
   await audit(ctx.community.id, req.user.id, 'member_kicked', target, { reason: str(req.body?.reason, { max: 300, required: false }) });
   hub.resync?.(target);
   hub.toUser(target, 'community:removed', { id: ctx.community.id });
@@ -267,6 +271,7 @@ r.post('/communities/:id/bans', ah(async (req, res) => {
   const reason = str(req.body.reason, { max: 300, required: false });
   await db.query(`INSERT INTO community_bans (community_id, user_id, reason, banned_by) VALUES ($1,$2,$3,$4) ON CONFLICT (community_id,user_id) DO UPDATE SET reason=EXCLUDED.reason`, [ctx.community.id, target, reason, req.user.id]);
   await db.query('DELETE FROM community_members WHERE community_id=$1 AND user_id=$2', [ctx.community.id, target]);
+  await dropTag(ctx.community.id, target);
   await audit(ctx.community.id, req.user.id, 'member_banned', target, { reason });
   hub.resync?.(target);
   hub.toUser(target, 'community:removed', { id: ctx.community.id });
@@ -423,7 +428,7 @@ r.delete('/invites/community/:code', ah(async (req, res) => {
   res.json({ ok: true });
 }));
 async function validInvite(code) {
-  const inv = await db.one(`SELECT i.*, c.name, c.description, c.logo_file_id, c.banner_file_id, c.removed_at,
+  const inv = await db.one(`SELECT i.*, c.name, c.verified, c.description, c.logo_file_id, c.banner_file_id, c.removed_at,
       (SELECT count(*)::int FROM community_members m WHERE m.community_id=c.id) AS n
     FROM community_invites i JOIN communities c ON c.id=i.community_id WHERE i.code=$1`, [code]);
   if (!inv || inv.revoked || inv.removed_at || (inv.expires_at && new Date(inv.expires_at) < new Date()) || (inv.max_uses && inv.uses >= inv.max_uses)) {
@@ -434,7 +439,7 @@ async function validInvite(code) {
 r.get('/invites/community/:code', ah(async (req, res) => {
   const inv = await validInvite(str(req.params.code, { max: 40 }));
   const me = await db.one('SELECT 1 FROM community_members WHERE community_id=$1 AND user_id=$2', [inv.community_id, req.user.id]);
-  res.json({ communityId: inv.community_id, name: inv.name, description: inv.description, logo: fileUrl(inv.logo_file_id), banner: fileUrl(inv.banner_file_id), memberCount: inv.n, isMember: !!me });
+  res.json({ communityId: inv.community_id, verified: !!inv.verified, name: inv.name, description: inv.description, logo: fileUrl(inv.logo_file_id), banner: fileUrl(inv.banner_file_id), memberCount: inv.n, isMember: !!me });
 }));
 r.post('/invites/community/:code/join', ah(async (req, res) => {
   const inv = await validInvite(str(req.params.code, { max: 40 }));

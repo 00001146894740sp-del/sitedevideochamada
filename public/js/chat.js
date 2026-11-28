@@ -93,7 +93,7 @@ function convItem(c) {
   const el = h('button', { class: `list-item ${state.view.convId === c.id ? 'on' : ''} ${c.unread ? 'unread' : ''}`, onClick: () => openChat(c.id), onContextmenu: e => { e.preventDefault(); convMenu(e, c); } },
     avatar(c.type === 'dm' ? (c.other || c) : c, 46, { presence: c.type === 'dm' ? c.other?.presence : null, square: c.type === 'group' }),
     h('div', { class: 'meta' },
-      h('div', { class: 'name' }, h('span', null, c.name || 'Conversa'), c.type === 'dm' ? roleMark(c.other?.role) : null, c.muted ? icon('mute', 14) : null),
+      h('div', { class: 'name' }, h('span', null, c.name || 'Conversa'), c.type === 'dm' ? roleMark(c.other) : null, c.muted ? icon('mute', 14) : null),
       h('div', { class: `sub ${p.typing ? 'typing' : ''}` }, p.text)),
     h('div', { style: { display: 'grid', justifyItems: 'end', gap: '4px' } },
       h('span', { class: 'time' }, c.last ? fmtShort(c.last.createdAt) : ''),
@@ -151,7 +151,7 @@ export function openNewDM() {
     clear(list);
     if (!users.length) return list.appendChild(h('div', { class: 'empty' }, 'Ninguém encontrado.'));
     for (const u of users) list.appendChild(h('button', { class: 'list-item', onClick: async () => { m.close(); await startDM(u.id); } },
-      avatar(u, 40, { presence: u.presence }), h('div', { class: 'meta' }, h('div', { class: 'name' }, h('span', null, u.displayName), roleMark(u.role)), h('div', { class: 'sub' }, '@' + u.username))));
+      avatar(u, 40, { presence: u.presence }), h('div', { class: 'meta' }, h('div', { class: 'name' }, h('span', null, u.displayName), roleMark(u)), h('div', { class: 'sub' }, '@' + u.username))));
   };
   render(state.friends);
   let t;
@@ -257,7 +257,7 @@ function renderChat() {
     isChannel ? h('div', { class: 'avatar square', style: { width: '40px', height: '40px', background: 'rgba(var(--accent-rgb),.18)', color: 'var(--accent-2)' } }, icon(d.category === 'anuncios' ? 'megaphone' : d.isPrivate ? 'lock' : 'hash', 20))
       : avatar(d.type === 'dm' ? d.other : d, 40, { presence: d.type === 'dm' ? d.other?.presence : null, square: d.type === 'group' }),
     h('div', { class: 'grow', style: { cursor: 'pointer', minWidth: 0 }, onClick: toggleInfo },
-      h('div', { class: 'title' }, h('span', { class: 'ellipsis' }, title), d.type === 'dm' ? roleMark(d.other?.role) : null, conv?.muted ? icon('mute', 15) : null),
+      h('div', { class: 'title' }, h('span', { class: 'ellipsis' }, title), d.type === 'dm' ? roleMark(d.other) : null, conv?.muted ? icon('mute', 15) : null),
       status),
     d.type !== 'channel' ? iconBtn('phone', 'Chamada de voz', () => calls.startCall(d.id, 'audio')) : null,
     d.type !== 'channel' ? iconBtn('video', 'Chamada de vídeo', () => calls.startCall(d.id, 'video')) : null,
@@ -347,7 +347,7 @@ function messageEl(m, prev) {
   const el = h('div', { class: `msg ${mine ? 'mine' : ''} ${cur.selection?.has(m.id) ? 'selected' : ''}`, dataset: { id: m.id } });
   el.appendChild(h('div', { class: 'av-col' }, !grouped && m.sender ? h('div', { style: { marginTop: '8px', cursor: 'pointer' }, onClick: () => social.openProfile(m.sender.id) }, avatar(m.sender, 36)) : null));
   const body = h('div', { class: 'body' });
-  if (!grouped) body.appendChild(h('div', { class: 'who' }, h('b', { style: { color: m.sender?.color }, onClick: () => m.sender && social.openProfile(m.sender.id) }, m.sender?.displayName || 'Usuário removido'), roleMark(m.sender?.role), h('time', null, fmtTime(m.createdAt))));
+  if (!grouped) body.appendChild(h('div', { class: 'who' }, h('b', { style: { color: m.sender?.color }, onClick: () => m.sender && social.openProfile(m.sender.id) }, m.sender?.displayName || 'Usuário removido'), roleMark(m.sender), h('time', null, fmtTime(m.createdAt))));
   const bubble = h('div', { class: 'bubble' });
   if (m.deleted) {
     bubble.classList.add('deleted');
@@ -838,10 +838,10 @@ function togglePicker(ta) {
   };
   const showGifs = () => {
     clear(body);
-    if (!state.config.gifs) return body.appendChild(h('div', { class: 'empty' }, 'GIFs não estão configurados neste servidor (TENOR_API_KEY).'));
-    const q = h('input', { class: 'input', placeholder: 'Buscar GIFs no Tenor' });
+    if (!state.config.gifs) return body.appendChild(h('div', { class: 'empty' }, 'GIFs não estão configurados neste servidor (GIPHY_API_KEY).'));
+    const q = h('input', { class: 'input', placeholder: 'Buscar GIFs' });
     const grid = h('div', { class: 'gif-grid', style: { marginTop: '8px' } });
-    body.append(q, grid);
+    body.append(q, grid, h('p', { class: 'hint', style: { textAlign: 'center' } }, 'Powered by GIPHY'));
     const load = async () => {
       clear(grid).appendChild(h('div', { class: 'spinner' }));
       const list = await GET(`/gifs?q=${encodeURIComponent(q.value)}`).catch(() => []);
@@ -955,7 +955,7 @@ export function renderInfo() {
   if (d.type === 'dm') {
     const u = d.other || {};
     panel.append(h('div', { class: 'info-cover', style: u.banner ? { backgroundImage: `url("${u.banner}")` } : null }, close),
-      h('div', { class: 'info-head' }, avatar(u, 84, { presence: u.presence }), h('h3', null, u.displayName, ' ', roleMark(u.role)), h('div', { class: 'muted' }, '@' + (u.username || '')),
+      h('div', { class: 'info-head' }, avatar(u, 84, { presence: u.presence }), h('h3', null, u.displayName, ' ', roleMark(u)), h('div', { class: 'muted' }, '@' + (u.username || '')),
         u.customStatus ? h('div', { class: 'chip' }, u.customStatus) : null,
         h('div', { class: 'row', style: { marginTop: '8px' } },
           h('button', { class: 'btn sm', onClick: () => social.openProfile(u.id) }, icon('user', 15), 'Perfil'),

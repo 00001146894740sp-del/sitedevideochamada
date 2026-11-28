@@ -24,7 +24,7 @@ app.use(helmet({
       'style-src': ["'self'", 'https://fonts.googleapis.com', "'unsafe-inline'"],
       'font-src': ["'self'", 'https://fonts.gstatic.com', 'data:'],
       'img-src': ["'self'", 'data:', 'blob:', 'https:'],
-      'media-src': ["'self'", 'blob:', 'https://media.tenor.com'],
+      'media-src': ["'self'", 'blob:', 'https://*.giphy.com'],
       'connect-src': ["'self'", config.isProd ? `wss://${new URL(config.appUrl).host}` : 'ws:'],
       'frame-ancestors': ["'none'"],
       'object-src': ["'none'"],
@@ -62,6 +62,10 @@ api.use(require('./routes/communities').router);
 api.use(require('./routes/stories').router);
 api.use(require('./routes/misc').router);
 api.use(require('./routes/support').router);
+api.use(require('./routes/shop').router);
+api.use(require('./routes/tags').router);
+api.use('/admin', require('./routes/tags').ownerRouter);
+api.use('/admin', require('./routes/shop').adminRouter);
 api.use('/admin', require('./routes/admin').router);
 api.get('/announcements/active', async (req, res, next) => {
   try { res.json(await db.many(`SELECT id, title, content, created_at FROM announcements WHERE active ORDER BY id DESC LIMIT 5`)); } catch (e) { next(e); }

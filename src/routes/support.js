@@ -7,7 +7,7 @@ const { notify } = require('../notify');
 const { ah, err, str, int, oneOf, fileUrl, publicUser } = require('../util');
 
 const r = express.Router();
-const CATEGORIES = ['conta', 'login', 'mensagens', 'chamadas', 'grupos', 'comunidades', 'denuncia', 'pagamento', 'bug', 'sugestao', 'outro'];
+const CATEGORIES = ['verificacao', 'conta', 'login', 'mensagens', 'chamadas', 'grupos', 'comunidades', 'denuncia', 'pagamento', 'bug', 'sugestao', 'outro'];
 const isStaff = u => rank(u) >= 1;
 
 async function loadTicket(req) {

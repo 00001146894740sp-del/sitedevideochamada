@@ -70,7 +70,8 @@ function selfPayload(u, session) {
       hasPassword: !!u.password_hash,
       google: !!u.google_id,
       discord: !!u.discord_id,
-      deletionRequestedAt: u.deletion_requested_at
+      deletionRequestedAt: u.deletion_requested_at,
+      gg: u.gg_balance
     },
     settings: mergeDeep(DEFAULT_SETTINGS, u.settings),
     privacy: mergeDeep(DEFAULT_PRIVACY, u.privacy),
@@ -87,8 +88,9 @@ r.get('/config', ah(async (req, res) => {
     registrationOpen: (await getSetting('registration_open')) !== false,
     maintenanceNotice: await getSetting('maintenance_notice'),
     maxUploadMb: Math.min(Number(await getSetting('max_upload_mb')) || 25, config.maxUploadMb),
-    gifs: !!config.tenorApiKey,
-    ownerClaimAvailable: !!process.env.OWNER_SETUP_TOKEN
+    gifs: !!config.giphyApiKey,
+    ownerClaimAvailable: !!process.env.OWNER_SETUP_TOKEN,
+    badgeStyles: await getSetting('badge_styles')
   });
 }));
 

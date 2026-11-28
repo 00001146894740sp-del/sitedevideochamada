@@ -167,6 +167,12 @@ const P = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   minimize: '<path d="M8 3.5v3a2 2 0 0 1-2 2H3M21 8.5h-3a2 2 0 0 1-2-2v-3M3 15.5h3a2 2 0 0 1 2 2v3M16 20.5v-3a2 2 0 0 1 2-2h3"/>',
   maximize: '<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>',
+  volume: '<path d="M11 5 6 9H2.5v6H6l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>',
+  headphones: '<path d="M3.5 14v-2a8.5 8.5 0 0 1 17 0v2"/><rect x="3" y="14" width="5" height="7" rx="2"/><rect x="16" y="14" width="5" height="7" rx="2"/>',
+  gem: '<path d="M6.5 3.5h11l4 5.5L12 21 2.5 9z"/><path d="M2.5 9h19M9 3.5 12 21l3-17.5"/>',
+  bag: '<path d="M5 8h14l-1 12.5H6z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/>',
+  coin: '<circle cx="12" cy="12" r="9"/><path d="M14.5 9.2A3.2 3.2 0 0 0 12 8a4 4 0 0 0 0 8 3.6 3.6 0 0 0 3-1.5V12h-2.5"/>',
+  play: '<path d="M7 4.5v15l12-7.5z" fill="currentColor"/>',
   door: '<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h8M14 3l5 1.5v15L14 21zM11 12h.01"/>'
 };
 export function icon(name, size) {
@@ -294,15 +300,58 @@ export function avatar(u, size = 40, { presence, square, story } = {}) {
   const el = h('div', { class: `avatar ${square ? 'square' : ''}`, style: { width: size + 'px', height: size + 'px', fontSize: Math.round(size * 0.38) + 'px' } });
   if (u?.avatar || u?.logo) el.appendChild(h('img', { src: u.avatar || u.logo, alt: '', loading: 'lazy' }));
   else el.appendChild(h('span', { class: 'initials', style: { background: `linear-gradient(135deg, ${color}, #2b0b5c)` } }, initials(name)));
+  if (u?.frame && !square) el.appendChild(frameEl(u.frame));
   if (presence) el.appendChild(h('span', { class: `presence ${presence}`, title: PRESENCE_LABEL[presence] || '' }));
   void story;
   return el;
 }
+// moldura de avatar (item da loja)
+export function frameEl(cfg) {
+  const kind = cfg.kind || 'ring';
+  if (kind === 'image') return h('span', { class: 'frame image' }, h('img', { src: cfg.imageUrl, alt: '' }));
+  const c = (cfg.colors && cfg.colors.length ? cfg.colors : ['#f5c542']);
+  const bg = kind === 'spin' ? `conic-gradient(${[...c, c[0]].join(',')})` : c.length > 1 ? `linear-gradient(135deg, ${c.join(',')})` : c[0];
+  return h('span', { class: `frame ${kind}`, style: { background: bg, '--glow': c[c.length - 1] } });
+}
+// ===================== SELOS E TAGS (UI ou PNG, configuráveis pelo dono) =====================
+const DEFAULT_BADGES = {
+  verified: { mode: 'ui', text: 'VERIFICADO', colors: ['#9d4dff', '#f5c542'], textColor: '#ffffff', icon: 'check' },
+  owner: { mode: 'ui', text: 'DONO', colors: ['#ffe08a', '#f5c542'], textColor: '#2a1600' },
+  admin: { mode: 'ui', text: 'ADMIN', colors: ['#c18bff', '#9d4dff'], textColor: '#ffffff' },
+  moderator: { mode: 'ui', text: 'MOD', colors: ['#4dd0ff', '#4d7cff'], textColor: '#ffffff' },
+  support: { mode: 'ui', text: 'SUPORTE', colors: ['#3ddc97', '#1fa971'], textColor: '#04140c' }
+};
+const grad = c => (c && c.length > 1 ? `linear-gradient(135deg, ${c.join(',')})` : (c && c[0]) || '#9d4dff');
+export function badgeEl(key, style) {
+  const st = style || state.config?.badgeStyles?.[key] || DEFAULT_BADGES[key];
+  if (!st || st.mode === 'off') return null;
+  const title = { verified: 'Verificado', owner: 'Dono da plataforma', admin: 'Administrador', moderator: 'Moderador', support: 'Suporte' }[key] || st.text;
+  if (st.mode === 'png' && st.imageUrl) return h('img', { class: 'badge-png', src: st.imageUrl, alt: title, title });
+  const el = h('span', { class: 'ui-badge', title, style: { background: grad(st.colors), color: st.textColor || '#fff' } });
+  if (st.icon === 'check') el.appendChild(icon('check', 11));
+  el.appendChild(document.createTextNode(st.text || ''));
+  return el;
+}
+export function serverTagEl(tag) {
+  if (!tag || !tag.text) return null;
+  const cid = tag.communityId;
+  const el = h(cid ? 'button' : 'span', { class: 'server-tag' + (cid ? ' clickable' : ''), type: cid ? 'button' : undefined, title: tag.community ? `Tag de ${tag.community} — clique para ver o servidor` : 'Tag de servidor', style: { background: grad(tag.colors), color: tag.textColor || '#fff' },
+    onClick: cid ? e => { e.stopPropagation(); e.preventDefault(); emit('open-server-tag', cid); } : undefined });
+  if (tag.mode === 'png' && tag.imageUrl) el.appendChild(h('img', { src: tag.imageUrl, alt: '' }));
+  else el.appendChild(document.createTextNode('#'));
+  el.appendChild(document.createTextNode(tag.text));
+  return el;
+}
+export const verifiedMark = () => badgeEl('verified');
 export const initials = n => (n || '?').trim().split(/\s+/).slice(0, 2).map(w => [...w][0] || '').join('').toUpperCase();
-export function roleMark(role) {
-  if (role === 'owner') return h('span', { class: 'role-mark', title: 'Dono da plataforma' }, icon('crown', 14));
-  if (['admin', 'moderator', 'support'].includes(role)) return h('span', { class: 'role-mark', title: ROLE_LABEL[role], style: { color: 'var(--accent-2)' } }, icon('shield', 14));
-  return null;
+export function roleMark(x) {
+  if (!x) return null;
+  if (typeof x === 'string') return roleMarkOnly(x);
+  const parts = [serverTagEl(x.tag), x.verified ? badgeEl('verified') : null, roleMarkOnly(x.role)].filter(Boolean);
+  return parts.length ? h('span', { class: 'name-tags' }, parts) : null;
+}
+function roleMarkOnly(role) {
+  return ['owner', 'admin', 'moderator', 'support'].includes(role) ? badgeEl(role) : null;
 }
 
 // ---------- texto rico seguro (links, menções, *negrito*, _itálico_, `código`) ----------
@@ -424,4 +473,69 @@ export function applyAppearance() {
   root.style.setProperty('--accent', a);
   const n = parseInt(a.slice(1), 16);
   root.style.setProperty('--accent-rgb', `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`);
+}
+
+// ===================== EFEITOS DE PERFIL (partículas em canvas) =====================
+export function playEffect(host, cfg, { duration = 3800 } = {}) {
+  if (!cfg || state.settings?.reduceMotion) return;
+  if (cfg.kind === 'gif') {
+    if (!cfg.imageUrl) return;
+    const img = h('img', { class: `fx-gif ${cfg.placement || 'full'}`, src: cfg.imageUrl + (cfg.imageUrl.includes('?') ? '&' : '?') + 't=' + Date.now(), alt: '' });
+    host.appendChild(img);
+    setTimeout(() => { img.classList.add('out'); setTimeout(() => img.remove(), 500); }, (cfg.duration || 4) * 1000);
+    return;
+  }
+  const cv = h('canvas', { class: 'fx-canvas' });
+  host.appendChild(cv);
+  const r = host.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = r.width * dpr; cv.height = r.height * dpr;
+  const W = r.width, H = r.height, ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
+  const colors = cfg.colors?.length ? cfg.colors : ['#f5c542', '#9d4dff', '#ffffff'];
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const P = []; const kind = cfg.kind; const t0 = performance.now();
+  const spawn = () => {
+    if (kind === 'confetti') P.push({ x: rnd(0, W), y: -10, vx: rnd(-1, 1), vy: rnd(2, 4.5), r: rnd(0, 6), vr: rnd(-.2, .2), w: rnd(6, 11), h: rnd(3, 6), c: pick(colors) });
+    else if (kind === 'snow') P.push({ x: rnd(0, W), y: -6, vx: 0, vy: rnd(.7, 1.8), s: rnd(2, 4.5), ph: rnd(0, 6), c: pick(colors) });
+    else if (kind === 'sparkles') P.push({ x: rnd(0, W), y: H + 5, vx: rnd(-.3, .3), vy: -rnd(1, 2.6), s: rnd(3, 8), ph: rnd(0, 6), c: pick(colors), life: 1 });
+    else if (kind === 'emoji') { const up = cfg.direction === 'up'; P.push({ x: rnd(0, W), y: up ? H + 20 : -20, vx: rnd(-.4, .4), vy: (up ? -1 : 1) * rnd(1.6, 3.2), e: pick(cfg.emoji || ['✨']), s: rnd(18, 34), r: rnd(-.3, .3) }); }
+  };
+  const burst = () => { const x = rnd(W * .15, W * .85), y = rnd(H * .1, H * .5), c = pick(colors); for (let i = 0; i < 46; i++) { const a = Math.PI * 2 * i / 46, sp = rnd(1.5, 4.2); P.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, c, life: 1, fw: true }); } };
+  let lastBurst = 0;
+  const star = (x, y, s) => { ctx.beginPath(); for (let i = 0; i < 8; i++) { const rr = i % 2 ? s * .35 : s; const a = i * Math.PI / 4; ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } ctx.closePath(); ctx.fill(); };
+  const frame = now => {
+    const t = now - t0; ctx.clearRect(0, 0, W, H);
+    const spawning = t < duration - 1200;
+    if (spawning) {
+      if (kind === 'fireworks') { if (t - lastBurst > 420) { burst(); lastBurst = t; } }
+      else for (let i = 0; i < (kind === 'confetti' ? 4 : kind === 'emoji' ? 1 : 2); i++) if (Math.random() < .8) spawn();
+    }
+    for (let i = P.length - 1; i >= 0; i--) {
+      const p = P[i];
+      p.x += p.vx; p.y += p.vy;
+      if (p.fw) { p.vy += .05; p.vx *= .985; p.life -= .012; }
+      if (p.life !== undefined && kind === 'sparkles') p.life -= .006;
+      const fade = Math.max(0, Math.min(1, (duration - t) / 900));
+      ctx.globalAlpha = Math.max(0, (p.life ?? 1)) * fade;
+      ctx.fillStyle = p.c || '#fff';
+      if (kind === 'confetti') { p.r += p.vr; ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); ctx.restore(); }
+      else if (kind === 'snow') { p.ph += .03; p.x += Math.sin(p.ph) * .5; ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, 7); ctx.fill(); }
+      else if (kind === 'sparkles') { p.ph += .15; ctx.globalAlpha *= .55 + .45 * Math.sin(p.ph); star(p.x, p.y, p.s); }
+      else if (kind === 'emoji') { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.font = `${p.s}px serif`; ctx.fillText(p.e, -p.s / 2, p.s / 3); ctx.restore(); }
+      else if (p.fw) { ctx.beginPath(); ctx.arc(p.x, p.y, 2.2, 0, 7); ctx.fill(); }
+      if (p.y > H + 40 || p.y < -60 || (p.life !== undefined && p.life <= 0)) P.splice(i, 1);
+    }
+    ctx.globalAlpha = 1;
+    if (t < duration && cv.isConnected) requestAnimationFrame(frame); else cv.remove();
+  };
+  requestAnimationFrame(frame);
+}
+export const RARITY = { comum: ['Comum', '#a99bc8'], raro: ['Raro', '#4dd0ff'], epico: ['Épico', '#c18bff'], lendario: ['Lendário', '#f5c542'] };
+export const fmtGG = n => `${Number(n || 0).toLocaleString('pt-BR')} GG`;
+
+// Conquistas/insígnias com ícone de linha (sem emoji)
+const ACHIEVEMENT_ICON = { pioneer: 'compass', first_message: 'chat', social: 'users', founder: 'crown', storyteller: 'sparkle', caller: 'phone', staff: 'shield', verified: 'check', supporter: 'gem' };
+export function achievementEl(b, attrs = {}) {
+  return h('span', { class: `badge ach ${b.special ? 'special' : ''}`, title: b.description || '', ...attrs }, icon(ACHIEVEMENT_ICON[b.code] || 'star', 14), b.name);
 }

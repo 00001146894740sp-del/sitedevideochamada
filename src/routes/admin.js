@@ -57,7 +57,7 @@ r.get('/users', ah(async (req, res) => {
   const canSeeEmail = rank(req.user) >= ROLE_RANK.moderator;
   res.json({
     total: rows[0]?.total || 0, page,
-    users: rows.map(u => ({ ...publicUser(u), email: canSeeEmail ? u.email : null, status: u.status, suspendedUntil: u.suspended_until, statusReason: u.status_reason, createdAt: u.created_at, emailVerified: u.email_verified }))
+    users: rows.map(u => ({ ...publicUser(u), gg: u.gg_balance, email: canSeeEmail ? u.email : null, status: u.status, suspendedUntil: u.suspended_until, statusReason: u.status_reason, createdAt: u.created_at, emailVerified: u.email_verified }))
   });
 }));
 
@@ -72,7 +72,7 @@ r.get('/users/:id', ah(async (req, res) => {
     db.one(`SELECT (SELECT count(*)::int FROM messages WHERE sender_id=$1) AS messages, (SELECT count(*)::int FROM friends WHERE user_id=$1) AS friends`, [u.id])
   ]);
   res.json({
-    ...publicUser(u, { full: true }), email: rank(req.user) >= ROLE_RANK.moderator ? u.email : null,
+    ...publicUser(u, { full: true }), gg: u.gg_balance, email: rank(req.user) >= ROLE_RANK.moderator ? u.email : null,
     status: u.status, suspendedUntil: u.suspended_until, statusReason: u.status_reason, emailVerified: u.email_verified,
     bans, reports, logins, activeSessions: sessions.n, badges: badges.map(b => b.badge_code), counts
   });
@@ -222,7 +222,7 @@ r.get('/communities', ah(async (req, res) => {
   const rows = await db.many(`SELECT c.*, u.username AS owner_username, (SELECT count(*)::int FROM community_members m WHERE m.community_id=c.id) AS n,
       (SELECT count(*)::int FROM reports r WHERE r.target_type='community' AND r.target_id=c.id AND r.status IN ('open','reviewing')) AS reports
     FROM communities c JOIN users u ON u.id=c.owner_id WHERE ($1='' OR c.name ILIKE '%'||$1||'%') ORDER BY c.id DESC LIMIT 100`, [q]);
-  res.json(rows.map(c => ({ id: c.id, name: c.name, owner: c.owner_username, memberCount: c.n, isPublic: c.is_public, removed: !!c.removed_at, reports: c.reports, createdAt: c.created_at, logo: fileUrl(c.logo_file_id) })));
+  res.json(rows.map(c => ({ id: c.id, name: c.name, verified: c.verified, boostLevel: c.boost_level, tag: c.tag, owner: c.owner_username, memberCount: c.n, isPublic: c.is_public, removed: !!c.removed_at, reports: c.reports, createdAt: c.created_at, logo: fileUrl(c.logo_file_id) })));
 }));
 r.post('/communities/:id/remove', requireRole('admin'), ah(async (req, res) => {
   const c = await db.one('UPDATE communities SET removed_at=now() WHERE id=$1 RETURNING *', [int(req.params.id, { min: 1 })]);

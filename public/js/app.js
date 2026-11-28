@@ -8,6 +8,8 @@ import * as community from './community.js';
 import * as calls from './calls.js';
 import { openSettings } from './settings.js';
 import { openAdmin, openSupport } from './admin.js';
+import * as shop from './shop.js';
+import * as voice from './voice.js';
 
 const app = document.getElementById('app');
 const params = new URLSearchParams(location.search);
@@ -178,7 +180,7 @@ export const layout = {
 
 const SECTIONS = [
   ['chats', 'chat', 'Conversas'], ['friends', 'users', 'Amigos'], ['groups', 'group', 'Grupos'],
-  ['discover', 'compass', 'Comunidades'], ['calls', 'phone', 'Chamadas']
+  ['discover', 'compass', 'Comunidades'], ['calls', 'phone', 'Chamadas'], ['shop', 'bag', 'Loja GG']
 ];
 
 export function renderRail() {
@@ -253,6 +255,7 @@ export function go(section, opts = {}) {
   else if (section === 'groups') { chat.renderConvSide('groups'); chat.renderWelcome('groups'); }
   else if (section === 'friends') { social.renderFriendsSide(); social.renderFriendsPage(); }
   else if (section === 'calls') { calls.renderCallsSide(); chat.renderWelcome('calls'); }
+  else if (section === 'shop') { shop.renderShopSide(); shop.renderShop(); }
   else if (section === 'discover') { community.renderDiscoverSide(); community.renderDiscover(); }
   else if (section === 'community') community.openCommunity(opts.communityId, opts.channelId, opts.highlight);
 }
@@ -282,7 +285,8 @@ function connectSocket() {
   });
   s.on('conversation:update', d => chat.onConversationUpdate(d));
   s.on('presence', p => { if (p.self) { state.me.presence = p.presence === 'offline' ? state.me.presence : p.presence; renderRail(); } emit('presence', p); });
-  s.on('user:update', u => emit('user:update', u));
+  s.on('user:update', u => { if (u.id === state.me.id) { Object.assign(state.me, u); renderRail(); } emit('user:update', u); });
+  s.on('wallet', w => emit('wallet', w));
   s.on('friends:changed', async () => { await social.loadFriends(); renderRail(); emit('friends:changed'); });
   s.on('community:update', async d => { await community.loadCommunities(); renderRail(); emit('community:update', d); });
   s.on('community:removed', async d => {
@@ -295,7 +299,9 @@ function connectSocket() {
   s.on('badge', b => toast(`Nova conquista: ${b.icon} ${b.name}`, 'gold', { title: 'Conquista desbloqueada!' }));
   s.on('announcement', a => { toast(a.content.slice(0, 140), 'gold', { title: `📢 ${a.title}`, timeout: 9000 }); });
   s.on('support:changed', d => emit('support:changed', d));
+  s.on('badge-styles', b => { state.config.badgeStyles = b; renderRail(); chat.resyncOpen(); });
   calls.bindSocket(s);
+  voice.bindSocket(s);
 }
 
 // ===================== NOTIFICAÇÕES =====================
@@ -396,7 +402,7 @@ export function openSearch(initial = '') {
     const r = await GET(`/search?q=${encodeURIComponent(q)}&type=${type}`).catch(() => ({}));
     clear(results);
     const nodes = [
-      ...sec('Usuários', r.users, u => h('button', { class: 'list-item', onClick: close(() => social.openProfile(u.id)) }, avatar(u, 38, { presence: u.presence }), h('div', { class: 'meta' }, h('div', { class: 'name' }, h('span', null, u.displayName), roleMark(u.role)), h('div', { class: 'sub' }, '@' + u.username)))),
+      ...sec('Usuários', r.users, u => h('button', { class: 'list-item', onClick: close(() => social.openProfile(u.id)) }, avatar(u, 38, { presence: u.presence }), h('div', { class: 'meta' }, h('div', { class: 'name' }, h('span', null, u.displayName), roleMark(u)), h('div', { class: 'sub' }, '@' + u.username)))),
       ...sec('Conversas', r.conversations, c => h('button', { class: 'list-item', onClick: close(() => chat.openChat(c.id)) }, avatar(c, 38), h('div', { class: 'meta' }, h('div', { class: 'name' }, c.name), h('div', { class: 'sub' }, c.type === 'dm' ? 'Conversa privada' : 'Grupo')))),
       ...sec('Mensagens', r.messages, msg => h('button', { class: 'list-item', onClick: close(() => msg.conversation?.communityId ? go('community', { communityId: msg.conversation.communityId, channelId: msg.conversationId, highlight: msg.id }) : chat.openChat(msg.conversationId, { highlight: msg.id })) },
         avatar(msg.sender || {}, 34), h('div', { class: 'meta' }, h('div', { class: 'name' }, h('span', null, msg.sender?.displayName || ''), h('small', { class: 'faint' }, ` em ${msg.conversation?.type === 'channel' ? `#${msg.conversation.name} · ${msg.conversation.communityName}` : msg.conversation?.name || 'conversa privada'} · ${fmtRelative(msg.createdAt)}`)),
@@ -417,7 +423,7 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && state.me) { e.preventDefault(); openSearch(); }
 });
 
-window.addEventListener('beforeunload', () => calls.hangupAll?.());
+window.addEventListener('beforeunload', () => { calls.hangupAll?.(); voice.leave(true); });
 on('logout', logout);
 void confirmDialog;
 
